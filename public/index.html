@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChirpStack Gateway Analytics</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0c0c0c;
+            color: #00ff00;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .navigation {
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            padding: 8px 16px;
+            display: flex;
+            gap: 16px;
+        }
+
+        .nav-link {
+            color: #00ffff;
+            text-decoration: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .nav-link:hover {
+            background: #333;
+        }
+
+        .nav-link.active {
+            background: #2a2a2a;
+            color: #00ff00;
+        }
+
+        .dashboard {
+            height: calc(100vh - 40px);
+            display: grid;
+            grid-template-rows: 1fr 1fr;
+            grid-template-columns: 1fr 1fr;
+            gap: 2px;
+            padding: 2px;
+        }
+
+        .panel {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-header {
+            background: #2a2a2a;
+            color: #00ffff;
+            padding: 8px 12px;
+            font-weight: bold;
+            border-bottom: 1px solid #333;
+        }
+
+        .panel-content {
+            flex: 1;
+            padding: 8px;
+            overflow: auto;
+        }
+
+        /* Gateway Table */
+        .gateway-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .gateway-table th {
+            background: #2a2a2a;
+            color: #00ffff;
+            padding: 4px 8px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+            font-size: 12px;
+        }
+
+        .gateway-table td {
+            padding: 3px 8px;
+            border-bottom: 1px solid #1a1a1a;
+            font-size: 11px;
+        }
+
+        .frequency-high { color: #00ff00; }
+        .frequency-medium { color: #ffff00; }
+        .frequency-low { color: #ff6666; }
+
+        /* Map */
+        #map {
+            height: 100%;
+            width: 100%;
+            background: #1a1a1a;
+        }
+
+        .leaflet-container {
+            background: #1a1a1a !important;
+        }
+
+        /* Activity Log */
+        .log-container {
+            height: 100%;
+            overflow-y: auto;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            margin-bottom: 2px;
+            word-wrap: break-word;
+        }
+
+        .log-timestamp {
+            color: #666;
+        }
+
+        .log-error {
+            color: #ff6666;
+        }
+
+        /* Stats Panel */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            font-size: 12px;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .stat-label {
+            color: #888;
+        }
+
+        .stat-value {
+            color: #00ff00;
+            font-weight: bold;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Connection status */
+        .connection-status {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            z-index: 1000;
+        }
+
+        .connected {
+            background: #006600;
+            color: #00ff00;
+        }
+
+        .disconnected {
+            background: #660000;
+            color: #ff6666;
+        }
+    </style>
+</head>
+<body>
+    <div class="navigation">
+        <a href="/" class="nav-link active">Gateway Analytics</a>
+        <a href="/messages" class="nav-link">Message Monitor</a>
+    </div>
+
+    <div class="connection-status" id="connectionStatus">CONNECTING...</div>
+    
+    <div class="dashboard">
+        <!-- Gateway Analytics Panel -->
+        <div class="panel">
+            <div class="panel-header">GATEWAY ANALYTICS (ACTIVE: <span id="totalGateways">0</span>)</div>
+            <div class="panel-content">
+                <table class="gateway-table">
+                    <thead>
+                        <tr>
+                            <th>GATEWAY NAME</th>
+                            <th>FREQ</th>
+                            <th>RX</th>
+                            <th>TX</th>
+                            <th>LAST SEEN</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gatewayTableBody">
+                        <!-- Gateway rows will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Map Panel -->
+        <div class="panel">
+            <div class="panel-header">GATEWAY LOCATIONS (<span id="markerCount">0</span> MARKERS)</div>
+            <div class="panel-content">
+                <div id="map"></div>
+            </div>
+        </div>
+
+        <!-- System Stats Panel -->
+        <div class="panel">
+            <div class="panel-header">SYSTEM STATISTICS</div>
+            <div class="panel-content">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Gateways:</span>
+                        <span class="stat-value" id="statTotalGateways">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Active Gateways:</span>
+                        <span class="stat-value" id="statActiveGateways">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">High Frequency:</span>
+                        <span class="stat-value" id="statHighFreq">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Medium Frequency:</span>
+                        <span class="stat-value" id="statMediumFreq">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Low Frequency:</span>
+                        <span class="stat-value" id="statLowFreq">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Last Update:</span>
+                        <span class="stat-value" id="statLastUpdate">--:--:--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Log Panel -->
+        <div class="panel">
+            <div class="panel-header">GATEWAY ACTIVITY LOG</div>
+            <div class="panel-content">
+                <div class="log-container" id="logContainer">
+                    <!-- Log entries will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

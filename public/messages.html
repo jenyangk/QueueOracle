@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Bus Message Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0c0c0c;
+            color: #00ff00;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .navigation {
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            padding: 8px 16px;
+            display: flex;
+            gap: 16px;
+        }
+
+        .nav-link {
+            color: #00ffff;
+            text-decoration: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .nav-link:hover {
+            background: #333;
+        }
+
+        .nav-link.active {
+            background: #2a2a2a;
+            color: #00ff00;
+        }
+
+        .dashboard {
+            height: calc(100vh - 40px);
+            display: grid;
+            grid-template-rows: auto 1fr;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 2px;
+            padding: 2px;
+        }
+
+        .panel {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-header {
+            background: #2a2a2a;
+            color: #00ffff;
+            padding: 8px 12px;
+            font-weight: bold;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-content {
+            flex: 1;
+            padding: 8px;
+            overflow: auto;
+        }
+
+        .panel.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .panel.span-two {
+            grid-column: span 2;
+        }
+
+        /* Gateway Table */
+        .gateway-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        .gateway-table th {
+            background: #2a2a2a;
+            color: #00ffff;
+            padding: 4px 8px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+            position: sticky;
+            top: 0;
+            cursor: pointer;
+        }
+
+        .gateway-table th:hover {
+            background: #3a3a3a;
+        }
+
+        .gateway-table td {
+            padding: 3px 8px;
+            border-bottom: 1px solid #1a1a1a;
+            vertical-align: top;
+        }
+
+        .gateway-table tr:hover {
+            background: #2a2a2a;
+        }
+
+        /* Limit gateway panel height */
+        .gateway-panel .panel-content {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .details-panel .panel-content {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .gateway-id {
+            color: #00ff00;
+            font-weight: bold;
+        }
+
+        .message-count {
+            color: #ffff00;
+            text-align: right;
+        }
+
+        .sort-indicator {
+            color: #888;
+            font-size: 10px;
+            margin-left: 4px;
+        }
+
+        /* Message Table */
+        .message-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+        }
+
+        .message-table th {
+            background: #2a2a2a;
+            color: #00ffff;
+            padding: 2px 6px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+            position: sticky;
+            top: 0;
+        }
+
+        .message-table td {
+            padding: 1px 6px;
+            border-bottom: 1px solid #1a1a1a;
+            vertical-align: top;
+            line-height: 1.2;
+        }
+
+        .message-table tr:hover {
+            background: #2a2a2a;
+            cursor: pointer;
+        }
+
+        .message-chirpstack { color: #00ff00; }
+        .message-other { color: #888; }
+        .message-type-uplink { color: #00ffff; }
+        .message-type-downlink { color: #ff6666; }
+        .message-type-event { color: #ffff00; }
+
+        /* Statistics */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            font-size: 12px;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .stat-label {
+            color: #888;
+        }
+
+        .stat-value {
+            color: #00ff00;
+            font-weight: bold;
+        }
+
+        /* Message Details */
+        .message-details {
+            font-size: 11px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .json-key {
+            color: #00ffff;
+        }
+
+        .json-string {
+            color: #00ff00;
+        }
+
+        .json-number {
+            color: #ffff00;
+        }
+
+        .json-boolean {
+            color: #ff6666;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .btn {
+            background: #333;
+            color: #00ff00;
+            border: 1px solid #555;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 11px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #555;
+        }
+
+        .btn.danger {
+            color: #ff6666;
+            border-color: #ff6666;
+        }
+
+        .btn.danger:hover {
+            background: #331111;
+        }
+
+        /* Connection status */
+        .connection-status {
+            position: fixed;
+            top: 50px;
+            right: 10px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            z-index: 1000;
+        }
+
+        .connected {
+            background: #006600;
+            color: #00ff00;
+        }
+
+        .disconnected {
+            background: #660000;
+            color: #ff6666;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .preview-text {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="navigation">
+        <a href="/" class="nav-link">Gateway Analytics</a>
+        <a href="/messages" class="nav-link active">Message Monitor</a>
+    </div>
+
+    <div class="connection-status" id="connectionStatus">CONNECTING...</div>
+    
+    <div class="dashboard">
+        <!-- Statistics Panel -->
+        <div class="panel">
+            <div class="panel-header">
+                <span>MESSAGE STATISTICS</span>
+                <div class="controls">
+                    <button class="btn" id="refreshBtn">REFRESH</button>
+                    <button class="btn danger" id="clearBtn">CLEAR</button>
+                </div>
+            </div>
+            <div class="panel-content">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Messages:</span>
+                        <span class="stat-value" id="statTotalMessages">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">ChirpStack Messages:</span>
+                        <span class="stat-value" id="statChirpStackMessages">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Unique Gateways:</span>
+                        <span class="stat-value" id="statUniqueGateways">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Unique Devices:</span>
+                        <span class="stat-value" id="statUniqueDevices">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Uplink Messages:</span>
+                        <span class="stat-value" id="statUplinkMessages">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Downlink Messages:</span>
+                        <span class="stat-value" id="statDownlinkMessages">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Average Size:</span>
+                        <span class="stat-value" id="statAverageSize">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Last Update:</span>
+                        <span class="stat-value" id="statLastUpdate">--:--:--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gateway Message Counts Panel -->
+        <div class="panel gateway-panel">
+            <div class="panel-header">
+                <span>GATEWAY MESSAGE COUNTS</span>
+                <span class="stat-value" id="gatewayCountTotal">0</span>
+            </div>
+            <div class="panel-content">
+                <table class="gateway-table">
+                    <thead>
+                        <tr>
+                            <th onclick="app.sortGatewayTable('gatewayId')">
+                                GATEWAY ID
+                                <span class="sort-indicator" id="sortGatewayId">↓</span>
+                            </th>
+                            <th onclick="app.sortGatewayTable('count')">
+                                COUNT
+                                <span class="sort-indicator" id="sortCount"></span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="gatewayTableBody">
+                        <!-- Gateway rows will be inserted here -->
+                        <tr style="color: #888;">
+                            <td colspan="2">Loading gateway data...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Message Details Panel -->
+        <div class="panel details-panel">
+            <div class="panel-header">MESSAGE DETAILS</div>
+            <div class="panel-content">
+                <div class="message-details" id="messageDetails">
+                    Select a message from the table below to view details...
+                </div>
+            </div>
+        </div>
+
+        <!-- Messages Table Panel -->
+        <div class="panel full-width">
+            <div class="panel-header">
+                <span>SERVICE BUS MESSAGES (<span id="messageCount">0</span>)</span>
+            </div>
+            <div class="panel-content">
+                <table class="message-table">
+                    <thead>
+                        <tr>
+                            <th>SEQUENCE #</th>
+                            <th>TYPE</th>
+                            <th>GATEWAY</th>
+                            <th>DEVICE</th>
+                            <th>ENQUEUED TIME</th>
+                            <th>SIZE</th>
+                            <th>PREVIEW</th>
+                        </tr>
+                    </thead>
+                    <tbody id="messageTableBody">
+                        <!-- Message rows will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="messages.js"></script>
+</body>
+</html>
